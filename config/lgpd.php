@@ -5,12 +5,12 @@ return [
          'termsOfUsage'=>[
              'title'=> 'Términos de Uso', 
              'text'=> file_get_contents(__DIR__ . '/lgpd-terms/terms-of-usage.html'),
-             'buttonText' => i::__('Aceito os termos de uso')
+             'buttonText' => i::__('Aceito os termos de uso', 'multipleLocal')
          ],
          'privacyPolicy' => [
              'title'=>  'Política de Privacidad de Cultura en Línea',
              'text'=> file_get_contents(__DIR__ . '/lgpd-terms/privacy-policy.html'),
-             'buttonText' => i::__('Aceito as políticas de privacidade')
+             'buttonText' => i::__('Aceito as políticas de privacidade', 'multipleLocal')
          ],
 //         'termsUse' => [
 //             'title'=>  'Autorizaçión de uso de imagen',

@@ -25,6 +25,14 @@ class Plugin extends \MapasCulturais\Plugin {
         $app->hook('GET(<<auth|panel>>.<<*>>):before', function() use ($app) {
             $app->view->enqueueStyle('app-v2', 'multipleLocal-v2', 'css/plugin-MultiplLocalAuth.css');
         });
+
+        // Fail-safe: Set default email image if not configured in auth.php
+        // This ensures we don't fall back to the generic Brazilian core image
+        $authConfig = $app->config['auth.config'] ?? [];
+        if (empty($authConfig['urlImageToUseInEmails'])) {
+            $authConfig['urlImageToUseInEmails'] = $app->baseUrl . 'plugins/MandatoryMFA/assets/img/lc-login.png';
+            $app->config['auth.config'] = $authConfig;
+        }
     }
 
     public function register() {
