@@ -52,6 +52,7 @@ class Plugin extends \MapasCulturais\Plugin {
         $this->registerUserMetadata(\MultipleLocalAuth\Provider::$mfaCodeExpiresMetadata, ['label' => i::__('Expira Código MFA')]);
         $this->registerUserMetadata('mfa_temp_token', ['label' => i::__('Token Temporal MFA')]);
         $this->registerUserMetadata('mfa_temp_token_expires', ['label' => i::__('Expira Token Temporal MFA')]);        
+        $this->registerUserMetadata('mfa_temp_method', ['label' => i::__('Método Temporal MFA')]);
         $this->registerUserMetadata('mfa_totp_secret', ['label' => i::__('Secreto TOTP (Google Authenticator)')]);
         $this->registerUserMetadata('mfa_trusted_devices', ['label' => i::__('Dispositivos Confiables MFA')]);
     }
