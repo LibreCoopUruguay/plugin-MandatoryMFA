@@ -298,6 +298,8 @@ class Provider extends BaseProvider {
                     
                 } catch (\Throwable $e) {
                     // Fall back to normal login on MFA error
+                    error_log("MandatoryMFA Login Error: " . $e->getMessage());
+                    error_log($e->getTraceAsString());
                 }
             }
 
