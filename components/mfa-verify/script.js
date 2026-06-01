@@ -14,11 +14,15 @@
         vueApp.component('mfa-verify', {
             template: template,
             data() {
+                const params = new URLSearchParams(window.location.search);
+                const method = params.get('method') || 'email';
                 return {
                     code: '',
                     error: '',
                     loading: false,
-                    resendSent: false
+                    resendSent: false,
+                    mfaMethod: method,
+                    rememberDevice: false
                 };
             },
             methods: {
@@ -27,12 +31,18 @@
                     this.loading = true;
 
                     try {
+                        let bodyParams = new URLSearchParams();
+                        bodyParams.append('code', this.code);
+                        if (this.rememberDevice) {
+                            bodyParams.append('rememberDevice', 'true');
+                        }
+
                         const response = await fetch($MAPAS.baseURL + 'auth/verify_mfa', {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/x-www-form-urlencoded'
                             },
-                            body: 'code=' + encodeURIComponent(this.code)
+                            body: bodyParams
                         });
 
                         const data = await response.json();
@@ -50,9 +60,29 @@
                     }
                 },
 
-                async resendCode() {
+                async resendCode(fallback = false) {
                     try {
-                        const response = await fetch($MAPAS.baseURL + 'auth/resend_mfa', { method: 'POST' });
+                        this.error = '';
+                        let bodyParams = new URLSearchParams();
+                        if (fallback) {
+                            bodyParams.append('fallback', '1');
+                        }
+                        
+                        const response = await fetch($MAPAS.baseURL + 'auth/resend_mfa', { 
+                            method: 'POST',
+                            body: bodyParams
+                        });
+                        const data = await response.json();
+                        
+                        if (data.error) {
+                            this.error = data.data;
+                            return;
+                        }
+
+                        if (fallback) {
+                            this.mfaMethod = 'email';
+                        }
+                        this.code = '';
                         this.resendSent = true;
                     } catch (e) {
                         console.error(e);

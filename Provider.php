@@ -51,6 +51,60 @@ class Provider extends BaseProvider {
              exit;
         });
 
+        // SETUP TOTP: GET
+        $app->hook('GET(auth.setup_totp)', function() use($app){
+            if (!$app->user) {
+                $app->redirect($app->createUrl('auth', ''));
+                return;
+            }
+            require_once __DIR__ . '/lib/GoogleAuthenticator.php';
+            $ga = new \MandatoryMFA\lib\GoogleAuthenticator();
+            
+            // Keep existing temporary secret if they refresh, to not invalidate the QR they are looking at
+            if (empty($_SESSION['mfa_totp_secret_temp'])) {
+                $_SESSION['mfa_totp_secret_temp'] = $ga->createSecret();
+            }
+            $secret = $_SESSION['mfa_totp_secret_temp'];
+            
+            $qrCodeUrl = $ga->getQRCodeGoogleUrl($app->siteName . ' (' . $app->user->email . ')', $secret, $app->siteName);
+            
+            $app->view->enqueueStyle('app-v2', 'multipleLocal-v2', 'css/plugin-MultiplLocalAuth.css');
+            echo $app->view->render('auth/setup-totp', ['qrCodeUrl' => $qrCodeUrl, 'secret' => $secret]);
+            exit;
+        });
+
+        // SETUP TOTP: POST
+        $app->hook('POST(auth.setup_totp)', function() use($app){
+            header('Content-Type: application/json');
+            if (!$app->user) {
+                echo json_encode(['success' => false, 'message' => i::__('Usuario no autenticado')]);
+                exit;
+            }
+            $code = trim($app->request->post('code'));
+            $secret = $_SESSION['mfa_totp_secret_temp'] ?? '';
+            
+            if (!$secret) {
+                echo json_encode(['success' => false, 'message' => i::__('Sesión expirada')]);
+                exit;
+            }
+            
+            require_once __DIR__ . '/lib/GoogleAuthenticator.php';
+            $ga = new \MandatoryMFA\lib\GoogleAuthenticator();
+            
+            if ($ga->verifyCode($secret, $code, 1)) {
+                $app->disableAccessControl();
+                $app->user->setMetadata('mfa_totp_secret', $secret);
+                $app->user->save(true);
+                $app->enableAccessControl();
+                unset($_SESSION['mfa_totp_secret_temp']);
+                
+                echo json_encode(['success' => true]);
+            } else {
+                echo json_encode(['success' => false, 'message' => i::__('Código inválido')]);
+            }
+            exit;
+        });
+
         // 2. Call Parent Constructor
         // This will register parent hooks, but since ours run first and exit, parent's won't trigger.
         parent::__construct($config);
@@ -193,7 +247,34 @@ class Provider extends BaseProvider {
             // MFA OBLIGATORIO: Se fuerza el flujo MFA para todos los usuarios
             if (true) {
                 try {
-                    $this->_generateAndSendMFA($userToLogin);
+                    // Verificación de Dispositivo Confiable
+                    $cookieToken = $_COOKIE['mfa_trusted_device'] ?? null;
+                    if ($cookieToken) {
+                        $trustedDevices = $userToLogin->getMetadata('mfa_trusted_devices');
+                        $trustedDevices = $trustedDevices ? json_decode($trustedDevices, true) : [];
+                        if (is_array($trustedDevices)) {
+                            $now = time();
+                            foreach ($trustedDevices as $device) {
+                                if (isset($device['expires']) && $device['expires'] > $now && isset($device['hash']) && password_verify($cookieToken, $device['hash'])) {
+                                    // Dispositivo confiable válido: Autenticar directamente
+                                    $this->authenticateUser($userToLogin);
+                                    header('Content-Type: application/json');
+                                    echo json_encode([
+                                        'success' => true,
+                                        'redirectTo' => $app->createUrl('panel', 'index')
+                                    ]);
+                                    exit;
+                                }
+                            }
+                        }
+                    }
+
+                    $totpSecret = $userToLogin->getMetadata('mfa_totp_secret');
+                    $mfaMethod = $totpSecret ? 'totp' : 'email';
+                    
+                    if ($mfaMethod === 'email') {
+                        $this->_generateAndSendMFA($userToLogin);
+                    }
                     
                     // Generate temporary token instead of using session
                     $token = bin2hex(random_bytes(32));
@@ -201,6 +282,7 @@ class Provider extends BaseProvider {
                     $app->disableAccessControl();
                     $userToLogin->setMetadata('mfa_temp_token', $token);
                     $userToLogin->setMetadata('mfa_temp_token_expires', time() + 300); // 5 minutes
+                    $userToLogin->setMetadata('mfa_temp_method', $mfaMethod);
                     $userToLogin->saveMetadata(true);
                     $app->enableAccessControl();
                     
@@ -209,7 +291,8 @@ class Provider extends BaseProvider {
                     echo json_encode([
                         'success' => true,
                         'mfa_required' => true,
-                        'redirectTo' => $app->createUrl('auth', 'mfa') . '?token=' . $token
+                        'mfa_method' => $mfaMethod,
+                        'redirectTo' => $app->createUrl('auth', 'mfa') . '?token=' . $token . '&method=' . $mfaMethod
                     ]);
                     exit;
                     
@@ -229,6 +312,118 @@ class Provider extends BaseProvider {
         return [
             'success' => !$hasErrors,
             'errors' => $errors
-        ];;
+        ];
+    }
+
+    public function verifyMFA() {
+        $app = App::i();
+        if (!isset($_SESSION['mfa_user_id'])) {
+            $this->json(['error' => true, 'data' => i::__('Sesión expirada.', 'multipleLocal')]);
+            return;
+        }
+        $userId = $_SESSION['mfa_user_id'];
+        $user = $app->repo('User')->find($userId);
+        
+        if (!$user) {
+            unset($_SESSION['mfa_user_id']);
+            unset($_SESSION['mfa_token']);
+            $this->json(['error' => true, 'data' => i::__('Usuario no encontrado.', 'multipleLocal')]);
+            return;
+        }
+
+        $code = trim($app->request->post('code'));
+        
+        $mfaMethod = $user->getMetadata('mfa_temp_method');
+        $totpSecret = $user->getMetadata('mfa_totp_secret');
+        
+        $isValid = false;
+        
+        if ($mfaMethod === 'totp' && $totpSecret) {
+            require_once __DIR__ . '/lib/GoogleAuthenticator.php';
+            $ga = new \MandatoryMFA\lib\GoogleAuthenticator();
+            $isValid = $ga->verifyCode($totpSecret, $code, 1);
+        } else {
+            $savedHash = $user->getMetadata(self::$mfaCodeHashMetadata);
+            $expires = $user->getMetadata(self::$mfaCodeExpiresMetadata);
+
+            if (time() > $expires) {
+                $this->json(['error' => true, 'data' => i::__('El código ha expirado.', 'multipleLocal')]);
+                return;
+            }
+            $isValid = password_verify($code, $savedHash);
+        }
+
+        $rememberDevice = $app->request->post('rememberDevice') === 'true';
+
+        if ($isValid) {
+            $app->disableAccessControl();
+            
+            if ($rememberDevice) {
+                $deviceToken = bin2hex(random_bytes(32));
+                setcookie('mfa_trusted_device', $deviceToken, time() + (30 * 24 * 60 * 60), '/', '', true, true);
+                
+                $trustedDevices = $user->getMetadata('mfa_trusted_devices');
+                $trustedDevices = $trustedDevices ? json_decode($trustedDevices, true) : [];
+                if (!is_array($trustedDevices)) $trustedDevices = [];
+                
+                $now = time();
+                $trustedDevices = array_filter($trustedDevices, function($device) use ($now) {
+                    return isset($device['expires']) && $device['expires'] > $now;
+                });
+                
+                $trustedDevices[] = [
+                    'hash' => password_hash($deviceToken, PASSWORD_DEFAULT),
+                    'expires' => time() + (30 * 24 * 60 * 60)
+                ];
+                
+                $user->setMetadata('mfa_trusted_devices', json_encode(array_values($trustedDevices)));
+            }
+
+            // Código válido - limpiar metadata temporal
+            $user->setMetadata(self::$mfaCodeHashMetadata, null);
+            $user->setMetadata(self::$mfaCodeExpiresMetadata, null);
+            $user->setMetadata('mfa_temp_token', null);
+            $user->setMetadata('mfa_temp_token_expires', null);
+            $user->setMetadata('mfa_temp_method', null);
+            $user->saveMetadata(true);
+            $app->enableAccessControl();
+            
+            unset($_SESSION['mfa_user_id']);
+            unset($_SESSION['mfa_token']);
+            
+            $this->authenticateUser($user);
+            
+            $this->json([
+                'success' => true,
+                'redirectTo' => $app->createUrl('panel', 'index')
+            ]);
+        } else {
+            $this->json(['error' => true, 'data' => i::__('Código incorrecto.', 'multipleLocal')]);
+        }
+    }
+
+    public function resendMFA() {
+        $app = App::i();
+        if (!isset($_SESSION['mfa_user_id'])) {
+            $this->json(['error' => true, 'data' => i::__('Sesión expirada.', 'multipleLocal')]);
+            return;
+        }
+
+        $userId = $_SESSION['mfa_user_id'];
+        $user = $app->repo('User')->find($userId);
+
+        if ($user) {
+            // Check if fallback to email was requested
+            $fallback = $app->request->post('fallback');
+            if ($fallback) {
+                $app->disableAccessControl();
+                $user->setMetadata('mfa_temp_method', 'email');
+                $user->saveMetadata(true);
+                $app->enableAccessControl();
+            }
+            
+            $this->_generateAndSendMFA($user);
+            $this->json(['success' => true, 'data' => i::__('Código reenviado.', 'multipleLocal')]);
+        }
     }
 }
