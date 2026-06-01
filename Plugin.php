@@ -36,6 +36,9 @@ class Plugin extends \MapasCulturais\Plugin {
     }
 
     public function register() {
+        // Register Vue 3 components
+        $this->registerComponent('setup-totp');
+        
         // Register User Metadata required for Login
         // Note: We use keys from MultipleLocalAuth namespace/provider to maintain compatibility
         $this->registerUserMetadata(\MultipleLocalAuth\Provider::$passMetaName, ['label' => i::__('Contraseña')]);
