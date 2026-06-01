@@ -69,7 +69,11 @@ class Provider extends BaseProvider {
             $qrCodeUrl = $ga->getQRCodeGoogleUrl($app->siteName . ' (' . $app->user->email . ')', $secret, $app->siteName);
             
             $app->view->enqueueStyle('app-v2', 'multipleLocal-v2', 'css/plugin-MultiplLocalAuth.css');
-            $this->render('auth/setup-totp', ['qrCodeUrl' => $qrCodeUrl, 'secret' => $secret]);
+            
+            // Cannot use $this->render('setup-totp') because it double-prepends 'auth/',
+            // resulting in 'auth/auth/setup-totp.php not found'.
+            // Use the view's render directly with the correct path.
+            $app->view->render('auth/setup-totp', ['qrCodeUrl' => $qrCodeUrl, 'secret' => $secret]);
         });
 
         // SETUP TOTP: POST
