@@ -68,27 +68,34 @@ class Provider extends BaseProvider {
             
             $qrCodeUrl = $ga->getQRCodeGoogleUrl($app->siteName . ' (' . $app->user->email . ')', $secret, $app->siteName);
             
+            // Read flash messages from session (set by POST handler)
+            $error = $_SESSION['mfa_setup_error'] ?? '';
+            $success = $_SESSION['mfa_setup_success'] ?? false;
+            unset($_SESSION['mfa_setup_error'], $_SESSION['mfa_setup_success']);
+            
             $app->view->enqueueStyle('app-v2', 'multipleLocal-v2', 'css/plugin-MultiplLocalAuth.css');
             
-            // Cannot use $this->render('setup-totp') because it double-prepends 'auth/',
-            // resulting in 'auth/auth/setup-totp.php not found'.
-            // Use the view's render directly with the correct path.
-            $app->view->render('auth/setup-totp', ['qrCodeUrl' => $qrCodeUrl, 'secret' => $secret]);
+            $app->view->render('auth/setup-totp', [
+                'qrCodeUrl' => $qrCodeUrl, 
+                'secret' => $secret,
+                'error' => $error,
+                'success' => $success,
+            ]);
         });
 
-        // SETUP TOTP: POST
+        // SETUP TOTP: POST (traditional form submission with redirect)
         $app->hook('POST(auth.setup_totp)', function() use($app){
-            header('Content-Type: application/json');
             if (!$app->user) {
-                echo json_encode(['success' => false, 'message' => i::__('Usuario no autenticado')]);
-                exit;
+                $app->redirect($app->createUrl('auth', ''));
+                return;
             }
-            $code = trim($app->request->post('code'));
+            $code = trim($_POST['code'] ?? '');
             $secret = $_SESSION['mfa_totp_secret_temp'] ?? '';
             
             if (!$secret) {
-                echo json_encode(['success' => false, 'message' => i::__('Sesión expirada')]);
-                exit;
+                $_SESSION['mfa_setup_error'] = i::__('Sesión expirada. Por favor intente nuevamente.');
+                $app->redirect($app->createUrl('auth', 'setup_totp'));
+                return;
             }
             
             require_once __DIR__ . '/lib/GoogleAuthenticator.php';
@@ -101,11 +108,13 @@ class Provider extends BaseProvider {
                 $app->enableAccessControl();
                 unset($_SESSION['mfa_totp_secret_temp']);
                 
-                echo json_encode(['success' => true]);
+                // Redirect to panel on success
+                $_SESSION['mfa_setup_success'] = true;
+                $app->redirect($app->createUrl('panel', 'index'));
             } else {
-                echo json_encode(['success' => false, 'message' => i::__('Código inválido')]);
+                $_SESSION['mfa_setup_error'] = i::__('Código inválido. Por favor intente nuevamente.');
+                $app->redirect($app->createUrl('auth', 'setup_totp'));
             }
-            exit;
         });
 
         // 2. Call Parent Constructor
