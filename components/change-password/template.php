@@ -24,7 +24,7 @@ $this->import('
                 </div>
             </div>
             <p class="help-text" style="font-size: 13px; color: #666; margin: 8px 0 0 0; line-height: 1.4;">
-                <?= i::__('Por políticas de seguridad, el uso de MFA es obligatorio para todas las cuentas. Se le enviará un código a su email al iniciar sesión.') ?>
+                <?= i::__('Por políticas de seguridad, el uso de MFA es obligatorio para todas las cuentas. Al iniciar sesión, se le solicitará un código de seguridad (enviado a su email o generado por su aplicación Authenticator).') ?>
             </p>
         </div>
 
@@ -42,7 +42,7 @@ $this->import('
                 </span>
             </div>
             <p class="help-text" style="font-size: 13px; color: #666; margin: 8px 0 0 0; line-height: 1.4; padding-left: 24px;">
-                <?= i::__('Aumente la seguridad de su cuenta. Se le enviará un código a su email al iniciar sesión.') ?>
+                <?= i::__('Aumente la seguridad de su cuenta. Al iniciar sesión, se le solicitará un código de seguridad (enviado a su email o generado por su aplicación Authenticator).') ?>
             </p>
         </div>
     </div>

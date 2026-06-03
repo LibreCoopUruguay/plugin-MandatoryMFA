@@ -148,6 +148,105 @@ class Provider extends BaseProvider {
             }
         });
 
+        // VERIFY MFA: POST (Override for TOTP)
+        // This hook runs before MultipleLocalAuth's hook. 
+        // If TOTP is used, we verify it here and exit. Otherwise, we let the parent hook handle the email code.
+        $app->hook('POST(auth.verify_mfa)', function () use($app) {
+            $userId = $_SESSION['mfa_user_id'] ?? null;
+            if (!$userId) {
+                header('Content-Type: application/json');
+                echo json_encode(['error' => true, 'data' => 'Sesión expirada.']);
+                exit;
+            }
+
+            $user = $app->repo('User')->find($userId);
+            if (!$user) {
+                unset($_SESSION['mfa_user_id']);
+                unset($_SESSION['mfa_token']);
+                header('Content-Type: application/json');
+                echo json_encode(['error' => true, 'data' => 'Usuario no encontrado.']);
+                exit;
+            }
+
+            $mfaMethod = $user->getMetadata('mfa_temp_method') ?? '';
+            $totpSecret = $user->getMetadata('mfa_totp_secret');
+
+            // If the user is using TOTP, handle verification here
+            if ($mfaMethod === 'totp' && $totpSecret) {
+                $code = trim($app->request->post('code'));
+                
+                require_once __DIR__ . '/lib/GoogleAuthenticator.php';
+                $ga = new \MandatoryMFA\lib\GoogleAuthenticator();
+                
+                if ($ga->verifyCode($totpSecret, $code, 1)) {
+                    // Código válido
+                    $app->disableAccessControl();
+                    $user->setMetadata('mfa_temp_token', null);
+                    $user->setMetadata('mfa_temp_token_expires', null);
+                    $user->setMetadata('mfa_temp_method', null);
+                    
+                    // Manejar dispositivo confiable (opcional)
+                    $rememberDevice = filter_var($app->request->post('rememberDevice'), FILTER_VALIDATE_BOOLEAN);
+                    if ($rememberDevice) {
+                        $trustedDevices = $user->getMetadata('mfa_trusted_devices');
+                        $trustedDevices = $trustedDevices ? json_decode($trustedDevices, true) : [];
+                        if (!is_array($trustedDevices)) $trustedDevices = [];
+                        
+                        $deviceToken = bin2hex(random_bytes(32));
+                        $expires = time() + (30 * 24 * 60 * 60); // 30 días
+                        
+                        $trustedDevices[] = [
+                            'hash' => password_hash($deviceToken, PASSWORD_DEFAULT),
+                            'expires' => $expires,
+                            'ip' => $_SERVER['REMOTE_ADDR'] ?? 'unknown',
+                            'user_agent' => $_SERVER['HTTP_USER_AGENT'] ?? 'unknown'
+                        ];
+                        
+                        $trustedDevices = array_filter($trustedDevices, function($device) {
+                            return isset($device['expires']) && $device['expires'] > time();
+                        });
+                        
+                        $user->setMetadata('mfa_trusted_devices', json_encode(array_values($trustedDevices)));
+                        
+                        setcookie(
+                            'mfa_trusted_device',
+                            $deviceToken,
+                            [
+                                'expires' => $expires,
+                                'path' => '/',
+                                'secure' => isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on',
+                                'httponly' => true,
+                                'samesite' => 'Lax'
+                            ]
+                        );
+                    }
+                    
+                    $user->saveMetadata(true);
+                    $app->enableAccessControl();
+                    
+                    unset($_SESSION['mfa_user_id']);
+                    unset($_SESSION['mfa_token']);
+                    
+                    $redirectUrl = $app->auth->getRedirectPath() ?: $app->createUrl('panel', 'index');
+                    $app->auth->authenticateUser($user);
+                    
+                    header('Content-Type: application/json');
+                    echo json_encode([
+                        'success' => true,
+                        'redirectTo' => $redirectUrl
+                    ]);
+                    exit;
+                } else {
+                    header('Content-Type: application/json');
+                    echo json_encode(['error' => true, 'data' => 'Código incorrecto o expirado.']);
+                    exit;
+                }
+            }
+            
+            // If it's not TOTP, just return and let MultipleLocalAuth process the email code.
+            return;
+        });
+
         // 2. Call Parent Constructor
         // This will register parent hooks, but since ours run first and exit, parent's won't trigger.
         parent::__construct($config);
