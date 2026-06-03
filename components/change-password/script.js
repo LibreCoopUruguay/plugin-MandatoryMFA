@@ -122,4 +122,5 @@ app.component('change-password', {
                 document.getElementById(id).type = 'password';
             }
         }
+    }
 });
