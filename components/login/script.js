@@ -1,21 +1,5 @@
-(function () {
-    function registerComponent() {
-        if (typeof app === 'undefined' && typeof window.app === 'undefined') {
-            setTimeout(registerComponent, 50);
-            return;
-        }
-
-        const vueApp = (typeof app !== 'undefined') ? app : window.app;
-
-        // Explicitly get template from global scope - prefer unique variable
-        const templateContent = (window.MFA_LOGIN_TEMPLATE) ? window.MFA_LOGIN_TEMPLATE : ((window.$TEMPLATES && window.$TEMPLATES['login']) ? window.$TEMPLATES['login'] : null);
-
-        if (!templateContent) {
-            console.error('MFA Login Template not found');
-        }
-
-        vueApp.component('login', {
-            template: templateContent,
+app.component('login', {
+    template: window.MFA_LOGIN_TEMPLATE ? window.MFA_LOGIN_TEMPLATE : (window.$TEMPLATES && window.$TEMPLATES['login'] ? window.$TEMPLATES['login'] : null),
 
             components: {
                 VueRecaptcha
@@ -39,8 +23,8 @@
                     recoveryRequest: false,
                     recoveryEmailSent: false,
 
-                    recoveryMode: $MAPAS.recoveryMode?.status ?? '',
-                    recoveryToken: $MAPAS.recoveryMode?.token ?? '',
+                    recoveryMode: ($MAPAS.recoveryMode && $MAPAS.recoveryMode.status) ? $MAPAS.recoveryMode.status : '',
+                    recoveryToken: ($MAPAS.recoveryMode && $MAPAS.recoveryMode.token) ? $MAPAS.recoveryMode.token : '',
                 }
             },
 
@@ -84,10 +68,8 @@
                     return (
                         this.configs &&
                         this.configs.strategies &&
-                        this.configs.strategies.Google &&
-                        this.configs.strategies.Google.visible &&
-                        this.configs.strategies.govbr &&
-                        this.configs.strategies.govbr.visible
+                        (this.configs.strategies.Google && this.configs.strategies.Google.visible) && 
+                        (this.configs.strategies.govbr && this.configs.strategies.govbr.visible)
                     );
                 }
             },
@@ -198,11 +180,3 @@
                 },
             },
         });
-    }
-
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', registerComponent);
-    } else {
-        registerComponent();
-    }
-})();

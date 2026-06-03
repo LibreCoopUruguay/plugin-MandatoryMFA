@@ -1,19 +1,5 @@
-(function () {
-    function registerComponent() {
-        if (typeof app === 'undefined' && typeof window.app === 'undefined') {
-            setTimeout(registerComponent, 50);
-            return;
-        }
-
-        const vueApp = (typeof app !== 'undefined') ? app : window.app;
-        const templateContent = window.CREATE_ACCOUNT_TEMPLATE || (window.$TEMPLATES && window.$TEMPLATES['create-account']);
-
-        if (!templateContent) {
-            console.error('Create Account Template not found');
-        }
-
-        vueApp.component('create-account', {
-            template: templateContent,
+app.component('create-account', {
+    template: window.CREATE_ACCOUNT_TEMPLATE || (window.$TEMPLATES && window.$TEMPLATES['create-account']),
 
             components: {
                 VueRecaptcha
@@ -30,7 +16,7 @@
                 const termsQtd = Object.entries(terms).length;
 
                 return {
-                    actualStep: globalState['stepper'] ?? 0,
+                    actualStep: (globalState['stepper'] !== undefined && globalState['stepper'] !== null) ? globalState['stepper'] : 0,
                     totalSteps: termsQtd + 2,
                     terms,
                     passwordRules: {},
@@ -332,11 +318,4 @@
                 },
             },
         });
-    }
-
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', registerComponent);
-    } else {
-        registerComponent();
-    }
-})();
+        });

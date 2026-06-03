@@ -1,18 +1,5 @@
-
-(function () {
-    function registerMFAComponent() {
-        if (typeof app === 'undefined' && typeof window.app === 'undefined') {
-            setTimeout(registerMFAComponent, 50);
-            return;
-        }
-
-        const vueApp = (typeof app !== 'undefined') ? app : window.app;
-
-        // Use unique global variable
-        const template = window.MFA_VERIFY_TEMPLATE || $TEMPLATES['mfa-verify'];
-
-        vueApp.component('mfa-verify', {
-            template: template,
+app.component('mfa-verify', {
+    template: window.MFA_VERIFY_TEMPLATE || $TEMPLATES['mfa-verify'],
             data() {
                 const params = new URLSearchParams(window.location.search);
                 const method = params.get('method') || 'email';
@@ -89,12 +76,4 @@
                     }
                 }
             }
-        });
-    }
-
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', registerMFAComponent);
-    } else {
-        registerMFAComponent();
-    }
-})();
+});

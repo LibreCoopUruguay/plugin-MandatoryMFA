@@ -7,14 +7,7 @@
 
 use MapasCulturais\i;
 
-$this->import('
-    entity-field
-    entity-terms
-    mc-card
-    mc-icon
-    mc-stepper
-    password-strongness
-');
+// Nested imports removed. These components must be imported by the parent view.
 ?>
 
 <div class="create-account"> 

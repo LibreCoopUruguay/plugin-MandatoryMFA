@@ -1,9 +1,9 @@
 app.component('change-password', {
-    template: $TEMPLATES['change-password'],
+    template: window.$TEMPLATES && window.$TEMPLATES['change-password'] ? window.$TEMPLATES['change-password'] : '',
 
-    components: {
-        VueRecaptcha
-    },
+            components: {
+                VueRecaptcha
+            },
 
     setup() {
         const messages = useMessages();
@@ -121,6 +121,5 @@ app.component('change-password', {
                 event.target.style.background = "url('https://api.iconify.design/carbon/view-filled.svg') no-repeat center center / 22.5px"
                 document.getElementById(id).type = 'password';
             }
-        },
-    },
+        }
 });

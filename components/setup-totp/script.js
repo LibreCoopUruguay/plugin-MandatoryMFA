@@ -1,17 +1,5 @@
-
-(function () {
-    function registerSetupTotpComponent() {
-        if (typeof app === 'undefined' && typeof window.app === 'undefined') {
-            setTimeout(registerSetupTotpComponent, 50);
-            return;
-        }
-
-        const vueApp = (typeof app !== 'undefined') ? app : window.app;
-
-        const template = window.SETUP_TOTP_TEMPLATE || $TEMPLATES['setup-totp'];
-
-        vueApp.component('setup-totp', {
-            template: template,
+app.component('setup-totp', {
+    template: window.SETUP_TOTP_TEMPLATE || $TEMPLATES['setup-totp'],
             props: {
                 qrCodeUrl: {
                     type: String,
@@ -66,12 +54,4 @@
                     }
                 }
             }
-        });
-    }
-
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', registerSetupTotpComponent);
-    } else {
-        registerSetupTotpComponent();
-    }
-})();
+});
