@@ -9,6 +9,7 @@ use MapasCulturais\i;
 
 $this->import('
     mc-modal
+    password-strongness
 ');
 ?>
 <div class="change-password">
