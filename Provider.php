@@ -140,6 +140,10 @@ class Provider extends BaseProvider {
                 
                 // Authenticate user and redirect (same logic as verify_mfa)
                 $redirectUrl = $app->auth->getRedirectPath() ?: $app->createUrl('panel', 'index');
+                if (strpos($redirectUrl, 'autenticacao') !== false || strpos($redirectUrl, 'auth') !== false) {
+                    $redirectUrl = $app->createUrl('panel', 'index');
+                }
+                
                 $app->auth->authenticateUser($user);
                 $app->redirect($redirectUrl);
             } else {
@@ -228,6 +232,10 @@ class Provider extends BaseProvider {
                     unset($_SESSION['mfa_token']);
                     
                     $redirectUrl = $app->auth->getRedirectPath() ?: $app->createUrl('panel', 'index');
+                    if (strpos($redirectUrl, 'autenticacao') !== false || strpos($redirectUrl, 'auth') !== false) {
+                        $redirectUrl = $app->createUrl('panel', 'index');
+                    }
+                    
                     $app->auth->authenticateUser($user);
                     
                     header('Content-Type: application/json');
