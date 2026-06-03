@@ -138,9 +138,10 @@ class Provider extends BaseProvider {
                 unset($_SESSION['mfa_user_id']);
                 unset($_SESSION['mfa_token']);
                 
-                // Authenticate user and redirect to panel
+                // Authenticate user and redirect (same logic as verify_mfa)
+                $redirectUrl = $app->auth->getRedirectPath() ?: $app->createUrl('panel', 'index');
                 $app->auth->authenticateUser($user);
-                $app->redirect($app->createUrl('panel', 'index'));
+                $app->redirect($redirectUrl);
             } else {
                 $_SESSION['mfa_setup_error'] = i::__('Código inválido. Por favor intente nuevamente.');
                 $app->redirect($app->createUrl('auth', 'setup_totp'));
