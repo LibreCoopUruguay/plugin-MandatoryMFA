@@ -53,10 +53,22 @@ class Provider extends BaseProvider {
 
         // SETUP TOTP: GET
         $app->hook('GET(auth.setup_totp)', function() use($app){
-            if (!$app->user) {
+            // During MFA flow, $app->user is GuestUser. Real user is in session.
+            $userId = $_SESSION['mfa_user_id'] ?? null;
+            if (!$userId) {
                 $app->redirect($app->createUrl('auth', ''));
                 return;
             }
+            
+            $app->disableAccessControl();
+            $user = $app->repo('User')->find($userId);
+            $app->enableAccessControl();
+            
+            if (!$user) {
+                $app->redirect($app->createUrl('auth', ''));
+                return;
+            }
+            
             require_once __DIR__ . '/lib/GoogleAuthenticator.php';
             $ga = new \MandatoryMFA\lib\GoogleAuthenticator();
             
@@ -66,12 +78,11 @@ class Provider extends BaseProvider {
             }
             $secret = $_SESSION['mfa_totp_secret_temp'];
             
-            $qrCodeUrl = $ga->getQRCodeGoogleUrl($app->siteName . ' (' . $app->user->email . ')', $secret, $app->siteName);
+            $qrCodeUrl = $ga->getQRCodeGoogleUrl($app->siteName . ' (' . $user->email . ')', $secret, $app->siteName);
             
             // Read flash messages from session (set by POST handler)
             $error = $_SESSION['mfa_setup_error'] ?? '';
-            $success = $_SESSION['mfa_setup_success'] ?? false;
-            unset($_SESSION['mfa_setup_error'], $_SESSION['mfa_setup_success']);
+            unset($_SESSION['mfa_setup_error']);
             
             $app->view->enqueueStyle('app-v2', 'multipleLocal-v2', 'css/plugin-MultiplLocalAuth.css');
             
@@ -79,16 +90,28 @@ class Provider extends BaseProvider {
                 'qrCodeUrl' => $qrCodeUrl, 
                 'secret' => $secret,
                 'error' => $error,
-                'success' => $success,
+                'success' => false,
             ]);
         });
 
         // SETUP TOTP: POST (traditional form submission with redirect)
         $app->hook('POST(auth.setup_totp)', function() use($app){
-            if (!$app->user) {
+            // During MFA flow, $app->user is GuestUser. Real user is in session.
+            $userId = $_SESSION['mfa_user_id'] ?? null;
+            if (!$userId) {
                 $app->redirect($app->createUrl('auth', ''));
                 return;
             }
+            
+            $app->disableAccessControl();
+            $user = $app->repo('User')->find($userId);
+            $app->enableAccessControl();
+            
+            if (!$user) {
+                $app->redirect($app->createUrl('auth', ''));
+                return;
+            }
+            
             $code = trim($_POST['code'] ?? '');
             $secret = $_SESSION['mfa_totp_secret_temp'] ?? '';
             
@@ -102,14 +125,21 @@ class Provider extends BaseProvider {
             $ga = new \MandatoryMFA\lib\GoogleAuthenticator();
             
             if ($ga->verifyCode($secret, $code, 1)) {
+                // Save TOTP secret to user
                 $app->disableAccessControl();
-                $app->user->setMetadata('mfa_totp_secret', $secret);
-                $app->user->save(true);
+                $user->setMetadata('mfa_totp_secret', $secret);
+                // Clean up MFA temp data
+                $user->setMetadata('mfa_temp_token', null);
+                $user->setMetadata('mfa_temp_token_expires', null);
+                $user->saveMetadata(true);
                 $app->enableAccessControl();
-                unset($_SESSION['mfa_totp_secret_temp']);
                 
-                // Redirect to panel on success
-                $_SESSION['mfa_setup_success'] = true;
+                unset($_SESSION['mfa_totp_secret_temp']);
+                unset($_SESSION['mfa_user_id']);
+                unset($_SESSION['mfa_token']);
+                
+                // Authenticate user and redirect to panel
+                $app->auth->authenticateUser($user);
                 $app->redirect($app->createUrl('panel', 'index'));
             } else {
                 $_SESSION['mfa_setup_error'] = i::__('Código inválido. Por favor intente nuevamente.');
